@@ -44,6 +44,7 @@ import org.apache.hadoop.io.IOUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
+import static org.junit.Assert.assertTrue;
 
 /**
  * This class tests rolling upgrade.
@@ -56,7 +57,7 @@ public class TestRollingUpgrade {
     if (success) {
       Assert.assertEquals(0, dfsadmin.run(args));
     } else {
-      Assert.assertTrue(dfsadmin.run(args) != 0);
+      assertTrue(dfsadmin.run(args) != 0);
     }
   }
 
@@ -106,9 +107,9 @@ public class TestRollingUpgrade {
 
         // All directories created before upgrade, when upgrade in progress and
         // after upgrade finalize exists
-        Assert.assertTrue(dfs.exists(foo));
-        Assert.assertTrue(dfs.exists(bar));
-        Assert.assertTrue(dfs.exists(baz));
+        assertTrue(dfs.exists(foo));
+        assertTrue(dfs.exists(bar));
+        assertTrue(dfs.exists(baz));
 
         dfs.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
         dfs.saveNamespace();
@@ -119,9 +120,9 @@ public class TestRollingUpgrade {
       cluster.restartNameNode();
       {
         final DistributedFileSystem dfs = cluster.getFileSystem();
-        Assert.assertTrue(dfs.exists(foo));
-        Assert.assertTrue(dfs.exists(bar));
-        Assert.assertTrue(dfs.exists(baz));
+        assertTrue(dfs.exists(foo));
+        assertTrue(dfs.exists(bar));
+        assertTrue(dfs.exists(baz));
       }
     } finally {
       if(cluster != null) cluster.shutdown();
@@ -211,8 +212,8 @@ public class TestRollingUpgrade {
       final DistributedFileSystem dfs2 = cluster2.getFileSystem(); 
       
       // Check that cluster2 sees the edits made on cluster1
-      Assert.assertTrue(dfs2.exists(foo));
-      Assert.assertTrue(dfs2.exists(bar));
+      assertTrue(dfs2.exists(foo));
+      assertTrue(dfs2.exists(bar));
       Assert.assertFalse(dfs2.exists(baz));
 
       //query rolling upgrade in cluster2
@@ -223,9 +224,9 @@ public class TestRollingUpgrade {
       LOG.info("RESTART cluster 2");
       cluster2.restartNameNode();
       Assert.assertEquals(info1, dfs2.rollingUpgrade(RollingUpgradeAction.QUERY));
-      Assert.assertTrue(dfs2.exists(foo));
-      Assert.assertTrue(dfs2.exists(bar));
-      Assert.assertTrue(dfs2.exists(baz));
+      assertTrue(dfs2.exists(foo));
+      assertTrue(dfs2.exists(bar));
+      assertTrue(dfs2.exists(baz));
 
       //restart cluster with -upgrade should fail.
       try {
@@ -237,21 +238,21 @@ public class TestRollingUpgrade {
       LOG.info("RESTART cluster 2 again");
       cluster2.restartNameNode();
       Assert.assertEquals(info1, dfs2.rollingUpgrade(RollingUpgradeAction.QUERY));
-      Assert.assertTrue(dfs2.exists(foo));
-      Assert.assertTrue(dfs2.exists(bar));
-      Assert.assertTrue(dfs2.exists(baz));
+      assertTrue(dfs2.exists(foo));
+      assertTrue(dfs2.exists(bar));
+      assertTrue(dfs2.exists(baz));
 
       //finalize rolling upgrade
       final RollingUpgradeInfo finalize = dfs2.rollingUpgrade(
           RollingUpgradeAction.FINALIZE);
-      Assert.assertTrue(finalize.isFinalized());
+      assertTrue(finalize.isFinalized());
 
       LOG.info("RESTART cluster 2 with regular startup option");
       cluster2.getNameNodeInfos()[0].setStartOpt(StartupOption.REGULAR);
       cluster2.restartNameNode();
-      Assert.assertTrue(dfs2.exists(foo));
-      Assert.assertTrue(dfs2.exists(bar));
-      Assert.assertTrue(dfs2.exists(baz));
+      assertTrue(dfs2.exists(foo));
+      assertTrue(dfs2.exists(bar));
+      assertTrue(dfs2.exists(baz));
     } finally {
       if (cluster2 != null) cluster2.shutdown();
     }
@@ -316,8 +317,8 @@ public class TestRollingUpgrade {
     dfs.setSafeMode(SafeModeAction.SAFEMODE_LEAVE);
 
     dfs.mkdirs(bar);
-    Assert.assertTrue(dfs.exists(foo));
-    Assert.assertTrue(dfs.exists(bar));
+    assertTrue(dfs.exists(foo));
+    assertTrue(dfs.exists(bar));
 
     //truncate a file
     final int newLength = DFSUtil.getRandom().nextInt(data.length - 1) + 1;
@@ -334,7 +335,7 @@ public class TestRollingUpgrade {
     cluster.restartDataNode(dnprop, true);
 
     final DistributedFileSystem dfs = cluster.getFileSystem();
-    Assert.assertTrue(dfs.exists(foo));
+    assertTrue(dfs.exists(foo));
     Assert.assertFalse(dfs.exists(bar));
     AppendTestUtil.checkFullFile(dfs, file, data.length, data);
   }
@@ -372,20 +373,34 @@ public class TestRollingUpgrade {
 
   @Test (timeout = 300000)
   public void testFinalize() throws Exception {
+    testFinalizeMultipleNN(2);
+  }
+
+
+  @Test (timeout = 300000)
+  public void testFinalizeSeveralNN() throws Exception {
+    testFinalizeMultipleNN(3);
+  }
+
+  public void testFinalizeMultipleNN(int nnCount) throws Exception{
     final Configuration conf = new HdfsConfiguration();
     MiniQJMHACluster cluster = null;
     final Path foo = new Path("/foo");
     final Path bar = new Path("/bar");
+    MiniQJMHACluster.Builder builder = new MiniQJMHACluster.Builder(conf);
+    builder.setNumNameNodes(nnCount);
 
     try {
-      cluster = new MiniQJMHACluster.Builder(conf).build();
+      cluster = builder.build();
       MiniDFSCluster dfsCluster = cluster.getDfsCluster();
       dfsCluster.waitActive();
 
-      // let NN1 tail editlog every 1s
-      dfsCluster.getConfiguration(1).setInt(
-          DFSConfigKeys.DFS_HA_TAILEDITS_PERIOD_KEY, 1);
-      dfsCluster.restartNameNode(1);
+      // let other NN tail editlog every 1s
+      for(int i=1; i < nnCount; i++) {
+        dfsCluster.getConfiguration(i).setInt(
+            DFSConfigKeys.DFS_HA_TAILEDITS_PERIOD_KEY, 1);
+      }
+      dfsCluster.restartNameNodes();
 
       dfsCluster.transitionToActive(0);
       DistributedFileSystem dfs = dfsCluster.getFileSystem(0);
@@ -396,17 +411,17 @@ public class TestRollingUpgrade {
       // start rolling upgrade
       RollingUpgradeInfo info = dfs
           .rollingUpgrade(RollingUpgradeAction.PREPARE);
-      Assert.assertTrue(info.isStarted());
+      assertTrue(info.isStarted());
       dfs.mkdirs(bar);
 
       queryForPreparation(dfs);
 
       // The NN should have a copy of the fsimage in case of rollbacks.
-      Assert.assertTrue(fsimage.hasRollbackFSImage());
+      assertTrue(fsimage.hasRollbackFSImage());
 
       info = dfs.rollingUpgrade(RollingUpgradeAction.FINALIZE);
-      Assert.assertTrue(info.isFinalized());
-      Assert.assertTrue(dfs.exists(foo));
+      assertTrue(info.isFinalized());
+      assertTrue(dfs.exists(foo));
 
       // Once finalized, there should be no more fsimage for rollbacks.
       Assert.assertFalse(fsimage.hasRollbackFSImage());
@@ -423,6 +438,16 @@ public class TestRollingUpgrade {
 
   @Test (timeout = 300000)
   public void testQuery() throws Exception {
+    testQueryWithNNs(2);
+  }
+
+  @Test (timeout = 300000)
+  public void testQueryWithSeveralNNs() throws Exception {
+    testQueryWithNNs(3);
+  }
+
+
+  private void testQueryWithNNs(int nnCount) throws Exception{
     final Configuration conf = new Configuration();
     MiniQJMHACluster cluster = null;
     try {
@@ -433,22 +458,22 @@ public class TestRollingUpgrade {
       dfsCluster.transitionToActive(0);
       DistributedFileSystem dfs = dfsCluster.getFileSystem(0);
 
-      dfsCluster.shutdownNameNode(1);
+      dfsCluster.shutdownNameNodes();
 
       // start rolling upgrade
       RollingUpgradeInfo info = dfs
           .rollingUpgrade(RollingUpgradeAction.PREPARE);
-      Assert.assertTrue(info.isStarted());
+      assertTrue(info.isStarted());
 
       info = dfs.rollingUpgrade(RollingUpgradeAction.QUERY);
       Assert.assertFalse(info.createdRollbackImages());
 
-      dfsCluster.restartNameNode(1);
+      dfsCluster.restartNameNodes();
 
       queryForPreparation(dfs);
 
       // The NN should have a copy of the fsimage in case of rollbacks.
-      Assert.assertTrue(dfsCluster.getNamesystem(0).getFSImage()
+      assertTrue(dfsCluster.getNamesystem(0).getFSImage()
           .hasRollbackFSImage());
     } finally {
       if (cluster != null) {
@@ -485,6 +510,15 @@ public class TestRollingUpgrade {
 
   @Test(timeout = 300000)
   public void testCheckpoint() throws IOException, InterruptedException {
+    testCheckpointWithMultipleNN(2);
+  }
+
+  @Test(timeout = 300000)
+  public void testCheckpointWithSeveralNN() throws IOException, InterruptedException {
+    testCheckpointWithMultipleNN(3);
+  }
+
+  private void testCheckpointWithMultipleNN(int nnCount) throws IOException, InterruptedException {
     final Configuration conf = new Configuration();
     conf.setInt(DFSConfigKeys.DFS_HA_TAILEDITS_PERIOD_KEY, 1);
     conf.setInt(DFSConfigKeys.DFS_NAMENODE_CHECKPOINT_PERIOD_KEY, 1);
@@ -493,7 +527,7 @@ public class TestRollingUpgrade {
     final Path foo = new Path("/foo");
 
     try {
-      cluster = new MiniQJMHACluster.Builder(conf).build();
+      cluster = new MiniQJMHACluster.Builder(conf).setNumNameNodes(nnCount).build();
       MiniDFSCluster dfsCluster = cluster.getDfsCluster();
       dfsCluster.waitActive();
 
@@ -503,30 +537,38 @@ public class TestRollingUpgrade {
       // start rolling upgrade
       RollingUpgradeInfo info = dfs
           .rollingUpgrade(RollingUpgradeAction.PREPARE);
-      Assert.assertTrue(info.isStarted());
+      assertTrue(info.isStarted());
 
       queryForPreparation(dfs);
 
       dfs.mkdirs(foo);
       long txid = dfs.rollEdits();
-      Assert.assertTrue(txid > 0);
+      assertTrue(txid > 0);
 
-      int retries = 0;
-      while (++retries < 5) {
-        NNStorage storage = dfsCluster.getNamesystem(1).getFSImage()
-            .getStorage();
-        if (storage.getFsImageName(txid - 1) != null) {
-          return;
-        }
-        Thread.sleep(1000);
+      // make sure all the NNs catch up the txn
+      for (int i = 1; i < nnCount; i++) {
+        checkTxnIdPresent(i, dfsCluster, txid);
       }
-      Assert.fail("new checkpoint does not exist");
 
     } finally {
       if (cluster != null) {
         cluster.shutdown();
       }
     }
+  }
+
+  private void checkTxnIdPresent(int nnIndex, MiniDFSCluster dfsCluster, long txid)
+      throws InterruptedException {
+    int retries = 0;
+    while (++retries < 5) {
+      NNStorage storage = dfsCluster.getNamesystem(nnIndex).getFSImage()
+          .getStorage();
+      if (storage.getFsImageName(txid - 1) != null) {
+        return;
+      }
+      Thread.sleep(1000);
+    }
+    Assert.fail("new checkpoint does not exist");
   }
 
   static void queryForPreparation(DistributedFileSystem dfs) throws IOException,
