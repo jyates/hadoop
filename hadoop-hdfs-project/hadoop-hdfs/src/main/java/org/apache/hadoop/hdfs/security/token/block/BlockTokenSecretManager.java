@@ -77,6 +77,9 @@ public class BlockTokenSecretManager extends
   private final Map<Integer, BlockKey> allKeys;
   private String blockPoolId;
   private final String encryptionAlgorithm;
+
+  private int intRange = Integer.MAX_VALUE;
+  private int nnRangeStart = 0;
   
   private final SecureRandom nonceGenerator = new SecureRandom();
 
@@ -101,17 +104,20 @@ public class BlockTokenSecretManager extends
    * 
    * @param keyUpdateInterval how often a new key will be generated
    * @param tokenLifetime how long an individual token is valid
-   * @param nnIndex namenode index
+   * @param nnIndex namenode index of the namenode for which we are creating the manager
    * @param blockPoolId block pool ID
    * @param encryptionAlgorithm encryption algorithm to use
+   * @param numNNs number of namenodes possible
    */
   public BlockTokenSecretManager(long keyUpdateInterval,
-      long tokenLifetime, int nnIndex, String blockPoolId,
+      long tokenLifetime, int nnIndex, int numNNs,  String blockPoolId,
       String encryptionAlgorithm) {
     this(true, keyUpdateInterval, tokenLifetime, blockPoolId,
         encryptionAlgorithm);
-    Preconditions.checkArgument(nnIndex == 0 || nnIndex == 1);
-    this.nnIndex = nnIndex;
+    Preconditions.checkArgument(nnIndex >= 0);
+    Preconditions.checkArgument(numNNs > 0);
+    this.intRange = Integer.MAX_VALUE / numNNs;
+    this.nnRangeStart = intRange * nnIndex;
     setSerialNo(new SecureRandom().nextInt());
     generateKeys();
   }
@@ -129,7 +135,8 @@ public class BlockTokenSecretManager extends
   
   @VisibleForTesting
   public synchronized void setSerialNo(int serialNo) {
-    this.serialNo = (serialNo & LOW_MASK) | (nnIndex << 31);
+    // we mod the serial number by the range and then add that times the index
+    this.serialNo = (serialNo % intRange) + (nnRangeStart);
   }
   
   public void setBlockPoolId(String blockPoolId) {

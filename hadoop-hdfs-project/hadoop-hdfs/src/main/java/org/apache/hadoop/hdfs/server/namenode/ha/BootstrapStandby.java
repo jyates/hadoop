@@ -25,6 +25,7 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URL;
 import java.security.PrivilegedAction;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
@@ -70,10 +71,8 @@ public class BootstrapStandby implements Tool, Configurable {
   private static final Log LOG = LogFactory.getLog(BootstrapStandby.class);
   private String nsId;
   private String nnId;
-  private String otherNNId;
+  private List<RemoteNameNodeInfo> remoteNNs;
 
-  private URL otherHttpAddr;
-  private InetSocketAddress otherIpcAddr;
   private Collection<URI> dirsToFormat;
   private List<URI> editUrisToFormat;
   private List<URI> sharedEditsUris;
@@ -132,8 +131,8 @@ public class BootstrapStandby implements Tool, Configurable {
     System.err.println("Usage: " + this.getClass().getSimpleName() +
         " [-force] [-nonInteractive] [-skipSharedEditsCheck]");
   }
-  
-  private NamenodeProtocol createNNProtocolProxy()
+
+  private NamenodeProtocol createNNProtocolProxy(InetSocketAddress otherIpcAddr)
       throws IOException {
     return NameNodeProxies.createNonHAProxy(getConf(),
         otherIpcAddr, NamenodeProtocol.class,
@@ -143,16 +142,32 @@ public class BootstrapStandby implements Tool, Configurable {
   
   private int doRun() throws IOException {
 
-    NamenodeProtocol proxy = createNNProtocolProxy();
-    NamespaceInfo nsInfo;
-    try {
-      nsInfo = proxy.versionRequest();
-    } catch (IOException ioe) {
-      LOG.fatal("Unable to fetch namespace information from active NN at " +
-          otherIpcAddr + ": " + ioe.getMessage());
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("Full exception trace", ioe);
+    // find the active NN
+    NamenodeProtocol proxy = null;
+    NamespaceInfo nsInfo = null;
+    RemoteNameNodeInfo proxyInfo = null;
+    for (int i = 0; i < remoteNNs.size(); i++) {
+      proxyInfo = remoteNNs.get(i);
+      InetSocketAddress otherIpcAddress = proxyInfo.getIpcAddress();
+      proxy = createNNProtocolProxy(otherIpcAddress);
+      try {
+        // get the namespace from any active NN. On a fresh cluster, this is the active. On a
+        // running cluster, this works on any node.
+        nsInfo = proxy.versionRequest();
+        break;
+      } catch (IOException ioe) {
+        LOG.warn("Unable to fetch namespace information from remote NN at " + otherIpcAddress
+            + ": " + ioe.getMessage());
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Full exception trace", ioe);
+        }
       }
+    }
+
+    if (nsInfo == null) {
+      LOG.fatal(
+          "Unable to fetch namespace information from any remote NN. Possible NameNodes: "
+              + remoteNNs);
       return ERR_CODE_FAILED_CONNECT;
     }
 
@@ -168,9 +183,9 @@ public class BootstrapStandby implements Tool, Configurable {
         "=====================================================\n" +
         "About to bootstrap Standby ID " + nnId + " from:\n" +
         "           Nameservice ID: " + nsId + "\n" +
-        "        Other Namenode ID: " + otherNNId + "\n" +
-        "  Other NN's HTTP address: " + otherHttpAddr + "\n" +
-        "  Other NN's IPC  address: " + otherIpcAddr + "\n" +
+        "        Other Namenode ID: " + proxyInfo.getNameNodeID() + "\n" +
+        "  Other NN's HTTP address: " + proxyInfo.getHttpAddress() + "\n" +
+        "  Other NN's IPC  address: " + proxyInfo.getIpcAddress() + "\n" +
         "             Namespace ID: " + nsInfo.getNamespaceID() + "\n" +
         "            Block pool ID: " + nsInfo.getBlockPoolID() + "\n" +
         "               Cluster ID: " + nsInfo.getClusterID() + "\n" +
@@ -211,7 +226,7 @@ public class BootstrapStandby implements Tool, Configurable {
 
       // Download that checkpoint into our storage directories.
       MD5Hash hash = TransferFsImage.downloadImageToStorage(
-        otherHttpAddr, imageTxId, storage, true);
+        proxyInfo.getHttpAddress(), imageTxId, storage, true);
       image.saveDigestAndRenameCheckpointImage(NameNodeFile.IMAGE, imageTxId,
           hash);
     } catch (IOException ioe) {
@@ -279,18 +294,26 @@ public class BootstrapStandby implements Tool, Configurable {
       throw new HadoopIllegalArgumentException(
         "Shared edits storage is not enabled for this namenode.");
     }
-    
-    Configuration otherNode = HAUtil.getConfForOtherNode(conf);
-    otherNNId = HAUtil.getNameNodeId(otherNode, nsId);
-    otherIpcAddr = NameNode.getServiceAddress(otherNode, true);
-    Preconditions.checkArgument(otherIpcAddr.getPort() != 0 &&
-        !otherIpcAddr.getAddress().isAnyLocalAddress(),
-        "Could not determine valid IPC address for other NameNode (%s)" +
-        ", got: %s", otherNNId, otherIpcAddr);
 
-    final String scheme = DFSUtil.getHttpClientScheme(conf);
-    otherHttpAddr = DFSUtil.getInfoServerWithDefaultHost(
-        otherIpcAddr.getHostName(), otherNode, scheme).toURL();
+
+    remoteNNs = RemoteNameNodeInfo.getRemoteNameNodes(conf, nsId);
+    // validate the configured NNs
+    List<RemoteNameNodeInfo> remove = new ArrayList<RemoteNameNodeInfo>(remoteNNs.size());
+    for (RemoteNameNodeInfo info : remoteNNs) {
+      InetSocketAddress address = info.getIpcAddress();
+      LOG.info("Found nn: " + info.getNameNodeID() + ", ipc: " + info.getIpcAddress());
+      if (address.getPort() == 0 || address.getAddress().isAnyLocalAddress()) {
+        LOG.error("Could not determine valid IPC address for other NameNode ("
+            + info.getNameNodeID() + ") , got: " + address);
+        remove.add(info);
+      }
+    }
+
+    // remove any invalid nns
+    remoteNNs.removeAll(remove);
+
+    // make sure we have at least one left to read
+    Preconditions.checkArgument(!remoteNNs.isEmpty(), "Could not find any valid namenodes!");
 
     dirsToFormat = FSNamesystem.getNamespaceDirs(conf);
     editUrisToFormat = FSNamesystem.getNamespaceEditsDirs(

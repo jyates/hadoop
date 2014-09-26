@@ -30,6 +30,7 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.apache.hadoop.ha.HAServiceProtocol;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.commons.logging.Log;
@@ -81,8 +82,8 @@ public class ImageServlet extends HttpServlet {
   private static final String LATEST_FSIMAGE_VALUE = "latest";
   private static final String IMAGE_FILE_TYPE = "imageFile";
 
-  private static final Set<Long> currentlyDownloadingCheckpoints =
-    Collections.synchronizedSet(new HashSet<Long>());
+  private static SortedSet<Long> currentlyDownloadingCheckpoints = Collections
+      .<Long> synchronizedSortedSet(new TreeSet<Long>());
   
   @Override
   public void doGet(final HttpServletRequest request,
@@ -242,10 +243,12 @@ public class ImageServlet extends HttpServlet {
         SecondaryNameNode.getHttpAddress(conf).getHostName()));
 
     if (HAUtil.isHAEnabled(conf, DFSUtil.getNamenodeNameServiceId(conf))) {
-      Configuration otherNnConf = HAUtil.getConfForOtherNode(conf);
-      validRequestors.add(SecurityUtil.getServerPrincipal(otherNnConf
-          .get(DFSConfigKeys.DFS_NAMENODE_KERBEROS_PRINCIPAL_KEY),
-          NameNode.getAddress(otherNnConf).getHostName()));
+      List<Configuration> otherNnConfs = HAUtil.getConfForOtherNodes(conf);
+      for (Configuration otherNnConf : otherNnConfs) {
+        validRequestors.add(SecurityUtil.getServerPrincipal(otherNnConf
+                .get(DFSConfigKeys.DFS_NAMENODE_KERBEROS_PRINCIPAL_KEY),
+            NameNode.getAddress(otherNnConf).getHostName()));
+      }
     }
 
     for (String v : validRequestors) {
@@ -409,7 +412,6 @@ public class ImageServlet extends HttpServlet {
   /**
    * Set the required parameters for uploading image
    * 
-   * @param httpMethod instance of method to set the parameters
    * @param storage colon separated storageInfo string
    * @param txid txid of the image
    * @param imageFileSize size of the imagefile to be uploaded
@@ -448,11 +450,34 @@ public class ImageServlet extends HttpServlet {
 
             @Override
             public Void run() throws Exception {
+              // if its not the active NN, then we need to notify the caller it was was the wrong
+              // target (regardless of the fact that we got the image)
+              HAServiceProtocol.HAServiceState state = NameNodeHttpServer
+                  .getNameNodeStateFromContext(getServletContext());
+              if (state != HAServiceProtocol.HAServiceState.ACTIVE) {
+                // we need a different response type here so the client can differentiate this
+                // from the failure to upload due to (1) security, or (2) other checkpoints already
+                // present
+                response.sendError(HttpServletResponse.SC_EXPECTATION_FAILED,
+                    "Node is currently not in the active state, state:" + state +
+                    " does not support reading FSImages from other NameNodes");
+                return null;
+              }
 
               final long txid = parsedParams.getTxId();
 
               final NameNodeFile nnf = parsedParams.getNameNodeFile();
 
+              // if the node is attempting to upload an older transaction, we ignore it
+              SortedSet<Long> larger = currentlyDownloadingCheckpoints.tailSet(txid);
+              if (larger.size() > 0) {
+                response.sendError(HttpServletResponse.SC_CONFLICT,
+                    "Another checkpointer is already in the process of uploading a" +
+                        " checkpoint made up to transaction ID " + larger.last());
+                return null;
+              }
+
+              //make sure no one else has started uploading one
               if (!currentlyDownloadingCheckpoints.add(txid)) {
                 response.sendError(HttpServletResponse.SC_CONFLICT,
                     "Another checkpointer is already in the process of uploading a"

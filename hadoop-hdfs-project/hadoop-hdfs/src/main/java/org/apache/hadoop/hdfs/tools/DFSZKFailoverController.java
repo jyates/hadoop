@@ -22,6 +22,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_KERBEROS_PRINCIP
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -193,5 +195,17 @@ public class DFSZKFailoverController extends ZKFailoverController {
         Server.getRemoteAddress() + ". Not listed in " + DFSConfigKeys.DFS_ADMIN; 
     LOG.warn(msg);
     throw new AccessControlException(msg);
+  }
+
+  @Override
+  public List<HAServiceTarget> getAllOtherNodes() {
+    String nsId = DFSUtil.getNamenodeNameServiceId(conf);
+    List<String> otherNn = HAUtil.getNameNodeIdOfOtherNodes(conf, nsId);
+
+    List<HAServiceTarget> targets = new ArrayList<HAServiceTarget>(otherNn.size());
+    for (String nnId : otherNn) {
+      targets.add(new NNHAServiceTarget(conf, nsId, nnId));
+    }
+    return targets;
   }
 }

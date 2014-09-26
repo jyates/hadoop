@@ -62,8 +62,9 @@ import static org.junit.Assert.*;
 
 public class TestStandbyCheckpoints {
   private static final int NUM_DIRS_IN_LOG = 200000;
+  private static final int NUM_NNS = 3;
   protected MiniDFSCluster cluster;
-  protected NameNode nn0, nn1;
+  protected NameNode nn0, nn1, nn2;
   protected FileSystem fs;
   private final Random random = new Random();
   protected File tmpOivImgDir;
@@ -87,7 +88,8 @@ public class TestStandbyCheckpoints {
         MiniDFSNNTopology topology = new MiniDFSNNTopology()
             .addNameservice(new MiniDFSNNTopology.NSConf("ns1")
                 .addNN(new MiniDFSNNTopology.NNConf("nn1").setHttpPort(basePort))
-                .addNN(new MiniDFSNNTopology.NNConf("nn2").setHttpPort(basePort + 1)));
+                .addNN(new MiniDFSNNTopology.NNConf("nn2").setHttpPort(basePort + 1))
+                .addNN(new MiniDFSNNTopology.NNConf("nn3").setHttpPort(basePort + 2)));
 
         cluster = new MiniDFSCluster.Builder(conf)
             .nnTopology(topology)
@@ -97,6 +99,7 @@ public class TestStandbyCheckpoints {
 
         nn0 = cluster.getNameNode(0);
         nn1 = cluster.getNameNode(1);
+        nn1 = cluster.getNameNode(2);
         fs = HATestUtil.configureFailoverFs(cluster, conf);
 
         cluster.transitionToActive(0);
@@ -283,31 +286,43 @@ public class TestStandbyCheckpoints {
   @Test(timeout=60000)
   public void testCheckpointCancellationDuringUpload() throws Exception {
     // don't compress, we want a big image
-    cluster.getConfiguration(0).setBoolean(
-        DFSConfigKeys.DFS_IMAGE_COMPRESS_KEY, false);
-    cluster.getConfiguration(1).setBoolean(
-        DFSConfigKeys.DFS_IMAGE_COMPRESS_KEY, false);
+    for (int i = 0; i < NUM_NNS; i++) {
+      cluster.getConfiguration(i).setBoolean(
+          DFSConfigKeys.DFS_IMAGE_COMPRESS_KEY, false);
+    }
+
     // Throttle SBN upload to make it hang during upload to ANN
-    cluster.getConfiguration(1).setLong(
-        DFSConfigKeys.DFS_IMAGE_TRANSFER_RATE_KEY, 100);
-    cluster.restartNameNode(0);
-    cluster.restartNameNode(1);
+    for (int i = 1; i < NUM_NNS; i++) {
+      cluster.getConfiguration(i).setLong(
+          DFSConfigKeys.DFS_IMAGE_TRANSFER_RATE_KEY, 100);
+    }
+    for (int i = 0; i < NUM_NNS; i++) {
+      cluster.restartNameNode(i);
+    }
+
+    // update references to each of the nns
     nn0 = cluster.getNameNode(0);
     nn1 = cluster.getNameNode(1);
+    nn1 = cluster.getNameNode(2);
 
     cluster.transitionToActive(0);
 
     doEdits(0, 100);
-    HATestUtil.waitForStandbyToCatchUp(nn0, nn1);
-    HATestUtil.waitForCheckpoint(cluster, 1, ImmutableList.of(104));
+    HATestUtil.waitForStandbyToCatchUp(nn0, nn1, nn2);
+    for (int i = 1; i < NUM_NNS; i++) {
+      HATestUtil.waitForCheckpoint(cluster, i, ImmutableList.of(104));
+    }
+
     cluster.transitionToStandby(0);
     cluster.transitionToActive(1);
+
 
     // Wait to make sure background TransferFsImageUpload thread was cancelled.
     // This needs to be done before the next test in the suite starts, so that a
     // file descriptor is not held open during the next cluster init.
     cluster.shutdown();
     cluster = null;
+
     GenericTestUtils.waitFor(new Supplier<Boolean>() {
       @Override
       public Boolean get() {
