@@ -940,6 +940,7 @@ public class MiniDFSCluster {
 
       // Start all Namenodes
       nnIndex = 0;
+      nnCounter += nameservice.getNNs().size();
       for (NNConf nn : nameservice.getNNs()) {
         initNameNodeConf(conf, nsId, nsCounter - 1, nn.getNnId(), manageNameDfsDirs,
             enableManagedDfsDirsRedundancy, nnIndex++);
