@@ -865,99 +865,114 @@ public class MiniDFSCluster {
     // do the basic namenode configuration
     configureNameNodes(nnTopology, federation, conf);
 
-    // Do the rest of the NN configuration for things like shared edits,
-    // as well as directory formatting, etc.
+    //
     int nnCounter = 0;
     int nsCounter = 0;
     for (MiniDFSNNTopology.NSConf nameservice : nnTopology.getNameservices()) {
-      String nsId = nameservice.getId();
-      String lastDefaultFileSystem = null;
+      nnCounter += configureNameService(nameservice, nsCounter++, manageNameDfsSharedDirs,
+          manageNameDfsDirs, enableManagedDfsDirsRedundancy,
+          format, operation, clusterId, nnCounter);
+    }
+  }
 
-      // keep track of the ns index in which the NNs will be configured
-      nsCounter++;
+  /**
+   * Do the rest of the NN configuration for things like shared edits,
+   * as well as directory formatting, etc. for a single nameservice
+   * @param nnCounter the count of the number of namenodes already configured/started. Also,
+   *                  acts as the <i>index</i> to the next NN to start (since indicies start at 0).
+   * @return the number of namenodes that were started for this nameservice
+   * @throws IOException
+   */
+  private int configureNameService(MiniDFSNNTopology.NSConf nameservice, int nsCounter,
+      boolean manageNameDfsSharedDirs, boolean manageNameDfsDirs, boolean
+      enableManagedDfsDirsRedundancy, boolean format,
+      StartupOption operation, String clusterId,
+      final int nnCounter) throws IOException{
+    String nsId = nameservice.getId();
+    String lastDefaultFileSystem = null;
 
-      // If HA is enabled on this nameservice, enumerate all the namenodes
-      // in the configuration. Also need to set a shared edits dir
-      int numNNs = nameservice.getNNs().size();
-      if (numNNs > 1 && manageNameDfsSharedDirs) {
-          URI sharedEditsUri = getSharedEditsDir(nnCounter, nnCounter + numNNs - 1);
-          conf.set(DFS_NAMENODE_SHARED_EDITS_DIR_KEY, sharedEditsUri.toString());
-          // Clean out the shared edits dir completely, including all subdirectories.
-          FileUtil.fullyDelete(new File(sharedEditsUri));
+    // If HA is enabled on this nameservice, enumerate all the namenodes
+    // in the configuration. Also need to set a shared edits dir
+    int numNNs = nameservice.getNNs().size();
+    if (numNNs > 1 && manageNameDfsSharedDirs) {
+      URI sharedEditsUri = getSharedEditsDir(nnCounter, nnCounter + numNNs - 1);
+      conf.set(DFS_NAMENODE_SHARED_EDITS_DIR_KEY, sharedEditsUri.toString());
+      // Clean out the shared edits dir completely, including all subdirectories.
+      FileUtil.fullyDelete(new File(sharedEditsUri));
+    }
+
+    // Now format first NN and copy the storage directory from that node to the others.
+    int nnIndex = nnCounter;
+    Collection<URI> prevNNDirs = null;
+    for (NNConf nn : nameservice.getNNs()) {
+      initNameNodeConf(conf, nsId, nsCounter - 1, nn.getNnId(), manageNameDfsDirs,
+          manageNameDfsDirs,  nnIndex);
+      Collection<URI> namespaceDirs = FSNamesystem.getNamespaceDirs(conf);
+      if (format) {
+        // delete the existing namespaces
+        for (URI nameDirUri : namespaceDirs) {
+          File nameDir = new File(nameDirUri);
+          if (nameDir.exists() && !FileUtil.fullyDelete(nameDir)) {
+            throw new IOException("Could not fully delete " + nameDir);
+          }
+        }
+
+        // delete the checkpoint directories, if they exist
+        Collection<URI> checkpointDirs = Util.stringCollectionAsURIs(conf
+            .getTrimmedStringCollection(DFS_NAMENODE_CHECKPOINT_DIR_KEY));
+        for (URI checkpointDirUri : checkpointDirs) {
+          File checkpointDir = new File(checkpointDirUri);
+          if (checkpointDir.exists() && !FileUtil.fullyDelete(checkpointDir)) {
+            throw new IOException("Could not fully delete " + checkpointDir);
+          }
+        }
       }
 
-      // Now format first NN and copy the storage directory from that node to the others.
-      int nnIndex = 0;
-      Collection<URI> prevNNDirs = null;
-      for (NNConf nn : nameservice.getNNs()) {
-        initNameNodeConf(conf, nsId, nsCounter - 1, nn.getNnId(), manageNameDfsDirs,
-            manageNameDfsDirs,  nnIndex);
-        Collection<URI> namespaceDirs = FSNamesystem.getNamespaceDirs(conf);
-        if (format) {
-          // delete the existing namespaces
-          for (URI nameDirUri : namespaceDirs) {
-            File nameDir = new File(nameDirUri);
-            if (nameDir.exists() && !FileUtil.fullyDelete(nameDir)) {
-              throw new IOException("Could not fully delete " + nameDir);
-            }
-          }
-
-          // delete the checkpoint directories, if they exist
-          Collection<URI> checkpointDirs = Util.stringCollectionAsURIs(conf
-              .getTrimmedStringCollection(DFS_NAMENODE_CHECKPOINT_DIR_KEY));
-          for (URI checkpointDirUri : checkpointDirs) {
-            File checkpointDir = new File(checkpointDirUri);
-            if (checkpointDir.exists() && !FileUtil.fullyDelete(checkpointDir)) {
-              throw new IOException("Could not fully delete " + checkpointDir);
-            }
-          }
-        }
-
-        boolean formatThisOne = format;
-        // if we are looking at not the first NN
-        if (nnIndex++ > 0 && format) {
-          // Don't format the second, third, etc NN in an HA setup - that
-          // would result in it having a different clusterID,
-          // block pool ID, etc. Instead, copy the name dirs
-          // from the previous one.
-          formatThisOne = false;
-          assert (null != prevNNDirs);
-          copyNameDirs(prevNNDirs, namespaceDirs, conf);
-        }
-
-        if (formatThisOne) {
-          // Allow overriding clusterID for specific NNs to test
-          // misconfiguration.
-          if (nn.getClusterId() == null) {
-            StartupOption.FORMAT.setClusterId(clusterId);
-          } else {
-            StartupOption.FORMAT.setClusterId(nn.getClusterId());
-          }
-          DFSTestUtil.formatNameNode(conf);
-        }
-        prevNNDirs = namespaceDirs;
+      boolean formatThisOne = format;
+      // if we are looking at not the first NN
+      if (nnIndex++ > nnCounter && format) {
+        // Don't format the second, third, etc NN in an HA setup - that
+        // would result in it having a different clusterID,
+        // block pool ID, etc. Instead, copy the name dirs
+        // from the previous one.
+        formatThisOne = false;
+        assert (null != prevNNDirs);
+        copyNameDirs(prevNNDirs, namespaceDirs, conf);
       }
 
-      // Start all Namenodes
-      nnIndex = 0;
-      nnCounter += nameservice.getNNs().size();
-      for (NNConf nn : nameservice.getNNs()) {
-        initNameNodeConf(conf, nsId, nsCounter - 1, nn.getNnId(), manageNameDfsDirs,
-            enableManagedDfsDirsRedundancy, nnIndex++);
-        NameNodeInfo info = createNameNode(nnIndex, conf, numDataNodes, false, operation,
-            clusterId, nsId, nn.getNnId());
-
-        // Record the last namenode uri
-        if (info != null && info.conf != null) {
-          lastDefaultFileSystem =
-              info.conf.get(FS_DEFAULT_NAME_KEY);
+      if (formatThisOne) {
+        // Allow overriding clusterID for specific NNs to test
+        // misconfiguration.
+        if (nn.getClusterId() == null) {
+          StartupOption.FORMAT.setClusterId(clusterId);
+        } else {
+          StartupOption.FORMAT.setClusterId(nn.getClusterId());
         }
+        DFSTestUtil.formatNameNode(conf);
       }
-      if (!federation && lastDefaultFileSystem != null) {
-        // Set the default file system to the actual bind address of NN.
-        conf.set(FS_DEFAULT_NAME_KEY, lastDefaultFileSystem);
+      prevNNDirs = namespaceDirs;
+    }
+
+    // create all the namenodes in the namespace
+    nnIndex = nnCounter;
+    for (NNConf nn : nameservice.getNNs()) {
+      initNameNodeConf(conf, nsId, nsCounter - 1, nn.getNnId(), manageNameDfsDirs,
+          enableManagedDfsDirsRedundancy, nnIndex++);
+      NameNodeInfo info = createNameNode(conf, false, operation,
+          clusterId, nsId, nn.getNnId());
+
+      // Record the last namenode uri
+      if (info != null && info.conf != null) {
+        lastDefaultFileSystem =
+            info.conf.get(FS_DEFAULT_NAME_KEY);
       }
     }
+    if (!federation && lastDefaultFileSystem != null) {
+      // Set the default file system to the actual bind address of NN.
+      conf.set(FS_DEFAULT_NAME_KEY, lastDefaultFileSystem);
+    }
+
+    return numNNs;
   }
 
   /**
@@ -1168,11 +1183,9 @@ public class MiniDFSCluster {
             new String[] {} : new String[] {operation.getName()};
     return args;
   }
-  
-  private NameNodeInfo createNameNode(int nnIndex, Configuration conf,
-      int numDataNodes, boolean format, StartupOption operation,
-      String clusterId, String nameserviceId,
-      String nnId)
+
+  private NameNodeInfo createNameNode(Configuration conf, boolean format, StartupOption operation,
+      String clusterId, String nameserviceId, String nnId)
       throws IOException {
     // Format and clean out DataNode directories
     if (format) {
@@ -2715,8 +2728,7 @@ public class MiniDFSCluster {
     NameNodeInfo[] infos = this.getNameNodeInfos(nameserviceId);
     int nnIndex = infos == null ? 0 : infos.length;
     initNameNodeConf(conf, nameserviceId, nameServiceIndex, nnId, true, true, nnIndex);
-    NameNodeInfo info = createNameNode(nnIndex, conf, numDataNodes, true, null, null,
-        nameserviceId, nnId);
+    NameNodeInfo info = createNameNode(conf, true, null, null, nameserviceId, nnId);
 
     // Refresh datanodes with the newly started namenode
     for (DataNodeProperties dn : dataNodes) {
