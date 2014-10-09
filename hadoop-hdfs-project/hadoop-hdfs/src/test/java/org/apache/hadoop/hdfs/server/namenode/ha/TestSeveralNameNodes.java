@@ -49,7 +49,7 @@ public class TestSeveralNameNodes {
   private static final int NUM_THREADS = 3;
   private static final int LIST_LENGTH = 50;
   /** ms for length of test */
-  private static final long RUNTIME = 60000;
+  private static final long RUNTIME = 100000;
 
   @Test
   public void testCircularLinkedListWrites() throws Exception {
