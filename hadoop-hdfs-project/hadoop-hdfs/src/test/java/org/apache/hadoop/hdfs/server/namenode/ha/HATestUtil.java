@@ -71,27 +71,25 @@ public abstract class HATestUtil {
    *         active in NN_LAG_TIMEOUT milliseconds
    */
   public static void waitForStandbyToCatchUp(NameNode active,
-      NameNode ...standbys) throws InterruptedException, IOException, CouldNotCatchUpException {
-    
+      NameNode standby) throws InterruptedException, IOException, CouldNotCatchUpException {
+
     long activeTxId = active.getNamesystem().getFSImage().getEditLog()
-      .getLastWrittenTxId();
-    
+        .getLastWrittenTxId();
+
     active.getRpcServer().rollEditLog();
-    
+
     long start = Time.now();
-    for(NameNode standby : standbys) {
-      while (Time.now() - start < TestEditLogTailer.NN_LAG_TIMEOUT) {
-        long nn2HighestTxId = standby.getNamesystem().getFSImage()
-            .getLastAppliedTxId();
-        if (nn2HighestTxId >= activeTxId) {
-          return;
-        }
-        Thread.sleep(TestEditLogTailer.SLEEP_TIME);
+    while (Time.now() - start < TestEditLogTailer.NN_LAG_TIMEOUT) {
+      long nn2HighestTxId = standby.getNamesystem().getFSImage()
+          .getLastAppliedTxId();
+      if (nn2HighestTxId >= activeTxId) {
+        return;
       }
-      throw new CouldNotCatchUpException("Standby did not catch up to txid " +
-          activeTxId + " (currently at " +
-          standby.getNamesystem().getFSImage().getLastAppliedTxId() + ")");
+      Thread.sleep(TestEditLogTailer.SLEEP_TIME);
     }
+    throw new CouldNotCatchUpException("Standby did not catch up to txid " +
+        activeTxId + " (currently at " +
+        standby.getNamesystem().getFSImage().getLastAppliedTxId() + ")");
   }
 
   /**
