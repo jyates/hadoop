@@ -117,11 +117,13 @@ public class HAStressTestHarness {
           // next node, mod nns so we wrap to the 0th NN on the last iteration
           int next = (i + 1) % nns;
           System.err.println("==============================\n"
-              + "Failing over from " + i + "->" + next + "\n"
-              + "==================================");
+              + "[Starting] Failing over from " + i + "->" + next + "\n"
+              + "==============================");
           cluster.transitionToStandby(i);
           cluster.transitionToActive(next);
-
+          System.err.println("==============================\n"
+              + "[Completed] Failing over from " + i + "->" + next + "\n"
+              + "==============================");
           Thread.sleep(msBetweenFailovers);
         }
       }
