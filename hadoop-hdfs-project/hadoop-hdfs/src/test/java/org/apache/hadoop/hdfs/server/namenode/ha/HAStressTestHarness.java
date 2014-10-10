@@ -122,7 +122,8 @@ public class HAStressTestHarness {
           cluster.transitionToStandby(i);
           cluster.transitionToActive(next);
           System.err.println("==============================\n"
-              + "[Completed] Failing over from " + i + "->" + next + "\n"
+              + "[Completed] Failing over from " + i + "->" + next + ". Sleeping for "+
+              (msBetweenFailovers/1000) +"sec \n"
               + "==============================");
           Thread.sleep(msBetweenFailovers);
         }

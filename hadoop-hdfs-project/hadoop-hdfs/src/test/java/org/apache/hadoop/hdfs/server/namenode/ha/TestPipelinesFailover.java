@@ -90,7 +90,12 @@ public class TestPipelinesFailover {
   private static final int STRESS_RUNTIME = 40000;
 
   private static final int NN_COUNT = 3;
-  private static long FAILOVER_SEED = 0;
+  private static long FAILOVER_SEED = System.currentTimeMillis();
+  private static final Random failoverRandom = new Random(FAILOVER_SEED);
+  static{
+    // log the failover seed so we can reproduce the test exactly
+    LOG.info("Using failover seed - "+FAILOVER_SEED);
+  }
 
   enum TestScenario {
     GRACEFUL_FAILOVER {
@@ -114,10 +119,6 @@ public class TestPipelinesFailover {
   enum MethodToTestIdempotence {
     ALLOCATE_BLOCK,
     COMPLETE_FILE;
-  }
-
-  private static int getFailoverToActiveIndex() {
-    return new Random(FAILOVER_SEED).nextInt(NN_COUNT);
   }
 
   /**
@@ -522,7 +523,12 @@ public class TestPipelinesFailover {
    */
   private int failover(MiniDFSCluster cluster, TestScenario scenario, int activeIndex)
       throws IOException {
-    int nextActive = getFailoverToActiveIndex();
+    // get index of the next node that should be active, ensuring its not the same as the currently
+    // active node
+    int nextActive = failoverRandom.nextInt(NN_COUNT);
+    if (nextActive == activeIndex) {
+      nextActive = (nextActive + 1) % NN_COUNT;
+    }
     LOG.info("Failing over to a standby NN:" + nextActive + " from NN " + activeIndex);
     scenario.run(cluster, activeIndex, nextActive);
     return nextActive;
