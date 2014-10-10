@@ -865,13 +865,14 @@ public class MiniDFSCluster {
     // do the basic namenode configuration
     configureNameNodes(nnTopology, federation, conf);
 
-    //
     int nnCounter = 0;
     int nsCounter = 0;
+    // configure each NS independently
     for (MiniDFSNNTopology.NSConf nameservice : nnTopology.getNameservices()) {
-      nnCounter += configureNameService(nameservice, nsCounter++, manageNameDfsSharedDirs,
+      configureNameService(nameservice, nsCounter++, manageNameDfsSharedDirs,
           manageNameDfsDirs, enableManagedDfsDirsRedundancy,
           format, operation, clusterId, nnCounter);
+      nnCounter += nameservice.getNNs().size();
     }
   }
 
@@ -880,10 +881,9 @@ public class MiniDFSCluster {
    * as well as directory formatting, etc. for a single nameservice
    * @param nnCounter the count of the number of namenodes already configured/started. Also,
    *                  acts as the <i>index</i> to the next NN to start (since indicies start at 0).
-   * @return the number of namenodes that were started for this nameservice
    * @throws IOException
    */
-  private int configureNameService(MiniDFSNNTopology.NSConf nameservice, int nsCounter,
+  private void configureNameService(MiniDFSNNTopology.NSConf nameservice, int nsCounter,
       boolean manageNameDfsSharedDirs, boolean manageNameDfsDirs, boolean
       enableManagedDfsDirsRedundancy, boolean format,
       StartupOption operation, String clusterId,
@@ -905,7 +905,7 @@ public class MiniDFSCluster {
     int nnIndex = nnCounter;
     Collection<URI> prevNNDirs = null;
     for (NNConf nn : nameservice.getNNs()) {
-      initNameNodeConf(conf, nsId, nsCounter - 1, nn.getNnId(), manageNameDfsDirs,
+      initNameNodeConf(conf, nsId, nsCounter, nn.getNnId(), manageNameDfsDirs,
           manageNameDfsDirs,  nnIndex);
       Collection<URI> namespaceDirs = FSNamesystem.getNamespaceDirs(conf);
       if (format) {
@@ -956,7 +956,7 @@ public class MiniDFSCluster {
     // create all the namenodes in the namespace
     nnIndex = nnCounter;
     for (NNConf nn : nameservice.getNNs()) {
-      initNameNodeConf(conf, nsId, nsCounter - 1, nn.getNnId(), manageNameDfsDirs,
+      initNameNodeConf(conf, nsId, nsCounter, nn.getNnId(), manageNameDfsDirs,
           enableManagedDfsDirsRedundancy, nnIndex++);
       NameNodeInfo info = createNameNode(conf, false, operation,
           clusterId, nsId, nn.getNnId());
@@ -971,8 +971,6 @@ public class MiniDFSCluster {
       // Set the default file system to the actual bind address of NN.
       conf.set(FS_DEFAULT_NAME_KEY, lastDefaultFileSystem);
     }
-
-    return numNNs;
   }
 
   /**
