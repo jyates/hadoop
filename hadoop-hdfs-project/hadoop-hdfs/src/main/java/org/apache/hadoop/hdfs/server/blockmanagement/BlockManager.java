@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.blockmanagement;
 
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_NAMENODES_KEY_PREFIX;
 import static org.apache.hadoop.util.ExitUtil.terminate;
 
 import java.io.IOException;
@@ -41,6 +42,7 @@ import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.StorageType;
+import org.apache.hadoop.hdfs.DFSUtilClient;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
@@ -396,7 +398,7 @@ public class BlockManager {
 
     if (isHaEnabled) {
       // figure out which index we are of the nns
-      Collection<String> nnIds = DFSUtil.getNameNodeIds(conf, nsId);
+      Collection<String> nnIds = DFSUtilClient.getNameNodeIds(conf, nsId);
       String nnId = HAUtil.getNameNodeId(conf, nsId);
       int nnIndex = 0;
       for (String id : nnIds) {
