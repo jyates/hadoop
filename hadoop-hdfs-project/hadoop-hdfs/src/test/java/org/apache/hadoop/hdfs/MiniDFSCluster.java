@@ -914,6 +914,9 @@ public class MiniDFSCluster {
     // Now format first NN and copy the storage directory from that node to the others.
     int nnIndex = nnCounter;
     Collection<URI> prevNNDirs = null;
+    // TODO: Cleanup extra directories. For legacy reasons, this has the side-effect of creating
+    // MORE directories than is strictly needed for the NN <-> NS mapping. For example,
+    // 2 NNs in 1 NS will create 4 nn directories, though only the first two will actually be used.
     for (NNConf nn : nameservice.getNNs()) {
       initNameNodeConf(conf, nsId, nsCounter, nn.getNnId(), manageNameDfsDirs,
           manageNameDfsDirs,  nnIndex);
