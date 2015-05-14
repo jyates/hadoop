@@ -84,11 +84,12 @@ public class TestPipelinesFailover {
   private static final int STRESS_RUNTIME = 40000;
 
   private static final int NN_COUNT = 3;
-  private static long FAILOVER_SEED = System.currentTimeMillis();
+  private static final long FAILOVER_SEED = System.currentTimeMillis();
   private static final Random failoverRandom = new Random(FAILOVER_SEED);
   static{
     // log the failover seed so we can reproduce the test exactly
-    LOG.info("Using failover seed - "+FAILOVER_SEED);
+    LOG.info("Using random seed: " + FAILOVER_SEED
+        + " for selecting active target NN during failover");
   }
 
   enum TestScenario {
@@ -138,9 +139,6 @@ public class TestPipelinesFailover {
   
   private void doWriteOverFailoverTest(TestScenario scenario,
       MethodToTestIdempotence methodToTest) throws Exception {
-    FAILOVER_SEED = System.currentTimeMillis();
-    LOG.info("Using random seed: " + FAILOVER_SEED
-        + " for selecting active target NN during failover");
     Configuration conf = new Configuration();
     conf.setInt(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, BLOCK_SIZE);
     // Don't check replication periodically.
