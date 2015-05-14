@@ -18,15 +18,13 @@
 package org.apache.hadoop.hdfs;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataOutputStream;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.FileUtil;
-import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.*;
 import org.apache.hadoop.hdfs.MiniDFSCluster.DataNodeProperties;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.RollingUpgradeAction;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.SafeModeAction;
@@ -423,6 +421,7 @@ public class TestRollingUpgrade {
 
   @Test (timeout = 300000)
   public void testQuery() throws Exception {
+    jesse("Starting test query");
     final Configuration conf = new Configuration();
     MiniQJMHACluster cluster = null;
     try {
@@ -433,18 +432,26 @@ public class TestRollingUpgrade {
       dfsCluster.transitionToActive(0);
       DistributedFileSystem dfs = dfsCluster.getFileSystem(0);
 
+      jesse("shutting down NN1");
       dfsCluster.shutdownNameNode(1);
 
+      logState(dfsCluster);
+
+      jesse("running upgrade");
       // start rolling upgrade
       RollingUpgradeInfo info = dfs
           .rollingUpgrade(RollingUpgradeAction.PREPARE);
       Assert.assertTrue(info.isStarted());
+      logState(dfsCluster);
 
       info = dfs.rollingUpgrade(RollingUpgradeAction.QUERY);
       Assert.assertFalse(info.createdRollbackImages());
 
+      jesse("Restarting NN");
       dfsCluster.restartNameNode(1);
 
+      logState(dfsCluster);
+      jesse("restarted NN");
       queryForPreparation(dfs);
 
       // The NN should have a copy of the fsimage in case of rollbacks.
@@ -455,6 +462,56 @@ public class TestRollingUpgrade {
         cluster.shutdown();
       }
     }
+  }
+
+  private static void logState(MiniDFSCluster cluster) throws IOException {
+    Path dir = new Path(cluster.getDataDirectory()).getParent();
+    logFileSystemState(FileSystem.get(new Configuration(false)), dir, LOG);
+  }
+
+  private void jesse(String msg){
+    LOG.info("Jesse - "+msg);
+  }
+
+  public static void logFileSystemState(final FileSystem fs, final Path root, Log LOG)
+      throws IOException {
+    LOG.info("Current file system:");
+    logFSTree(LOG, fs, root, "|-");
+  }
+
+  /**
+   * Recursive helper to log the state of the FS
+   *
+   * @see #logFileSystemState(FileSystem, Path, Log)
+   */
+  private static void logFSTree(Log LOG, final FileSystem fs, final Path root, String prefix)
+      throws IOException {
+    FileStatus[] files = listStatus(fs, root, null);
+    if (files == null) return;
+
+    for (FileStatus file : files) {
+      if (file.isDirectory()) {
+        LOG.info(prefix + file.getPath().getName() + "/");
+        logFSTree(LOG, fs, file.getPath(), prefix + "---");
+      } else {
+        LOG.info(prefix + file.getPath().getName());
+      }
+    }
+  }
+
+  public static FileStatus [] listStatus(final FileSystem fs,
+      final Path dir, final PathFilter filter) throws IOException {
+    FileStatus [] status = null;
+    try {
+      status = filter == null ? fs.listStatus(dir) : fs.listStatus(dir, filter);
+    } catch (FileNotFoundException fnfe) {
+      // if directory doesn't exist, return null
+      if (LOG.isTraceEnabled()) {
+        LOG.trace(dir + " doesn't exist");
+      }
+    }
+    if (status == null || status.length < 1) return null;
+    return status;
   }
 
   @Test (timeout = 300000)
