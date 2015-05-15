@@ -529,6 +529,10 @@ public class ImageServlet extends HttpServlet {
                   // remove some old ones.
                   nnImage.purgeOldStorage(nnf);
                 } finally {
+                  // remove the request once we've processed it, or it threw an error, so we
+                  // aren't using it either
+                  currentlyDownloadingCheckpoints.remove(imageRequest);
+
                   stream.close();
                 }
               } finally {
