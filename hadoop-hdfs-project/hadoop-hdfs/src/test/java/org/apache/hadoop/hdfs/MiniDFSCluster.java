@@ -1966,6 +1966,7 @@ public class MiniDFSCluster {
 
     NameNode nn = NameNode.createNameNode(args, info.conf);
     info.nameNode = nn;
+    info.setStartOpt(startOpt);
     if (waitActive) {
       waitClusterUp();
       LOG.info("Restarted the namenode");
