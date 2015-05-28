@@ -590,7 +590,7 @@ public class ImageServlet extends HttpServlet {
     }
   }
 
-  private class ImageUploadRequest implements Comparable<ImageUploadRequest>{
+  private static class ImageUploadRequest implements Comparable<ImageUploadRequest> {
 
     private final long txId;
     private final String address;
