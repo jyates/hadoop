@@ -206,7 +206,7 @@ public class TestPipelinesFailover {
    * after the failover - ensures that updating the pipeline succeeds
    * even when the pipeline was constructed on a different NN.
    */
-  @Test(timeout=30000)
+  @Test(timeout=50000)
   public void testWriteOverGracefulFailoverWithDnFail() throws Exception {
     doTestWriteOverFailoverWithDnFail(TestScenario.GRACEFUL_FAILOVER);
   }
