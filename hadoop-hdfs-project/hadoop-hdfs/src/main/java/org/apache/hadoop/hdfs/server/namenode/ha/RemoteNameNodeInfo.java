@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import com.google.common.base.Objects;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.HAUtil;
@@ -99,39 +100,34 @@ public class RemoteNameNodeInfo {
   }
 
   @Override
-  public int hashCode() {
-    final int prime = 31;
-    int result = 1;
-    result = prime * result
-        + ((httpAddress == null) ? 0 : httpAddress.hashCode());
-    result = prime * result
-        + ((ipcAddress == null) ? 0 : ipcAddress.hashCode());
-    result = prime * result + ((nnId == null) ? 0 : nnId.hashCode());
-    return result;
-  }
-
-  @Override
-  public boolean equals(Object obj) {
-    if (this == obj) return true;
-    if (obj == null) return false;
-    if (getClass() != obj.getClass()) return false;
-    RemoteNameNodeInfo other = (RemoteNameNodeInfo) obj;
-
-    if (httpAddress == null) {
-      if (other.httpAddress != null) return false;
-    } else if (!httpAddress.equals(other.httpAddress)) return false;
-    if (ipcAddress == null) {
-      if (other.ipcAddress != null) return false;
-    } else if (!ipcAddress.equals(other.ipcAddress)) return false;
-    if (nnId == null) {
-      if (other.nnId != null) return false;
-    } else if (!nnId.equals(other.nnId)) return false;
-    return true;
-  }
-
-  @Override
   public String toString() {
     return "RemoteNameNodeInfo [nnId=" + nnId + ", ipcAddress=" + ipcAddress
         + ", httpAddress=" + httpAddress + "]";
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (o == null || getClass() != o.getClass()) return false;
+
+    RemoteNameNodeInfo that = (RemoteNameNodeInfo) o;
+
+    if (!nnId.equals(that.nnId)) return false;
+    if (!ipcAddress.equals(that.ipcAddress)) return false;
+    // convert to the standard strings since URL.equals does address resolution, which is a
+    // blocking call and a a FindBugs issue.
+    String httpString = httpAddress.toString();
+    String thatHttpString  = that.httpAddress.toString();
+    return httpString.equals(thatHttpString);
+
+  }
+
+  @Override
+  public int hashCode() {
+    int result = nnId.hashCode();
+    result = 31 * result + ipcAddress.hashCode();
+    // toString rather than hashCode b/c Url.hashCode is a blocking call.
+    result = 31 * result + httpAddress.toString().hashCode();
+    return result;
   }
 }

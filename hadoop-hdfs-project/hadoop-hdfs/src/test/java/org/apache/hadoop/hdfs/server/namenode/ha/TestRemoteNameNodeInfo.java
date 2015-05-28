@@ -17,24 +17,20 @@
  */
 package org.apache.hadoop.hdfs.server.namenode.ha;
 
-import static org.junit.Assert.assertEquals;
-
-import java.util.List;
-
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.MiniDFSNNTopology;
 import org.junit.Test;
 
+import java.util.List;
+
+import static org.junit.Assert.assertEquals;
+
 /**
  * Test that we correctly obtain remote namenode information
  */
 public class TestRemoteNameNodeInfo {
-
-  private static final Log LOG = LogFactory.getLog(TestRemoteNameNodeInfo.class);
 
   @Test
   public void testParseMultipleNameNodes() throws Exception {
