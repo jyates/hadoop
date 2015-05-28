@@ -118,7 +118,7 @@ public class TestEditLogTailer {
   public void testNN2TriggersLogRolls() throws Exception {
     testStandbyTriggersLogRolls(2);
   }
-  
+
   private static void testStandbyTriggersLogRolls(int activeIndex)
       throws Exception {
     Configuration conf = new Configuration();

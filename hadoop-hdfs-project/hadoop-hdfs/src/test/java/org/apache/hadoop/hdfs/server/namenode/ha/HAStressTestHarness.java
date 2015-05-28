@@ -43,7 +43,7 @@ public class HAStressTestHarness {
   static final int BLOCK_SIZE = 1024;
   final TestContext testCtx = new TestContext();
   private int nns = 2;
-  
+
   public HAStressTestHarness() {
     conf = new Configuration();
     conf.setInt(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, BLOCK_SIZE);

@@ -72,7 +72,7 @@ public class MiniZKFCCluster {
     for (int i = 0; i < 2; i++) {
       addSvcs(svcs, i);
     }
-    
+
     this.ctx = new TestContext();
     this.zks = zks;
   }
@@ -82,7 +82,7 @@ public class MiniZKFCCluster {
         1234)));
     svcs.get(i).setSharedResource(sharedResource);
   }
-  
+
   /**
    * Set up two services and their failover controllers. svc1 is started
    * first, so that it enters ACTIVE state, and then svc2 is started,

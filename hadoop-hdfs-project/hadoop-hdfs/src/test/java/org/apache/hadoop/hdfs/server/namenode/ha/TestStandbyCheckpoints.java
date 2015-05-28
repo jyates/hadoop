@@ -145,7 +145,7 @@ public class TestStandbyCheckpoints {
   @Test(timeout = 300000)
   public void testSBNCheckpoints() throws Exception {
     JournalSet standbyJournalSet = NameNodeAdapter.spyOnJournalSet(nns[1]);
-    
+
     doEdits(0, 10);
     HATestUtil.waitForStandbyToCatchUp(nns[0], nns[1]);
     // Once the standby catches up, it should notice that it needs to
@@ -222,9 +222,9 @@ public class TestStandbyCheckpoints {
         DFSConfigKeys.DFS_NAMENODE_CHECKPOINT_PERIOD_KEY, 0);
     cluster.restartNameNode(1);
     nns[1] = cluster.getNameNode(1);
- 
+
     FSImage spyImage1 = NameNodeAdapter.spyOnFsImage(nns[1]);
-    
+
     // We shouldn't save any checkpoints at txid=0
     Thread.sleep(1000);
     Mockito.verify(spyImage1, Mockito.never())
@@ -437,7 +437,7 @@ public class TestStandbyCheckpoints {
     assertFalse(nns[1].getNamesystem().getFsLockForTests().hasQueuedThreads());
     assertFalse(nns[1].getNamesystem().getFsLockForTests().isWriteLocked());
     assertTrue(nns[1].getNamesystem().getCpLockForTests().hasQueuedThreads());
-    
+
     // Get /jmx of the standby NN web UI, which will cause the FSNS read lock to
     // be taken.
     String pageContents = DFSTestUtil.urlGet(new URL("http://" +

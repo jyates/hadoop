@@ -2418,7 +2418,7 @@ public class MiniDFSCluster {
       LOG.info(" has namenode: " + getNN(i).nameNode);
     }
   }
-  
+
   private synchronized boolean shouldWait(DatanodeInfo[] dnInfo,
       InetSocketAddress addr) {
     // If a datanode failed to start, then do not wait
@@ -2834,7 +2834,7 @@ public class MiniDFSCluster {
 
     int nameServiceIndex = namenodes.keys().size();
     String nameserviceId = NAMESERVICE_ID_PREFIX + (namenodes.keys().size() + 1);
-    
+
     String nameserviceIds = conf.get(DFS_NAMESERVICES);
     nameserviceIds += "," + nameserviceId;
     conf.set(DFS_NAMESERVICES, nameserviceIds);

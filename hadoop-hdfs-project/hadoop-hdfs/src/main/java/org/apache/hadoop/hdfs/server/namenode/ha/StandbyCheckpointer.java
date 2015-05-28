@@ -73,7 +73,7 @@ public class StandbyCheckpointer {
   private final Object cancelLock = new Object();
   private Canceler canceler;
   private boolean isPrimaryCheckPointer = true;
-  
+
   // Keep track of how many checkpoints were canceled.
   // This is for use in tests.
   private static int canceledCount = 0;

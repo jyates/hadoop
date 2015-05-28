@@ -57,10 +57,10 @@ public class TestFailoverWithBlockTokensEnabled {
   private static final Path TEST_PATH = new Path("/test-path");
   private static final String TEST_DATA = "very important text";
   private static final int numNNs = 3;
-  
+
   private Configuration conf;
   private MiniDFSCluster cluster;
-  
+
   @Before
   public void startCluster() throws IOException {
     conf = new Configuration();

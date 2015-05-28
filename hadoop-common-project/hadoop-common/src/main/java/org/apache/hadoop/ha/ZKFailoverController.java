@@ -698,7 +698,7 @@ public abstract class ZKFailoverController {
     for (ZKFCProtocol zkfc : otherZkfcs) {
       zkfc.cedeActive(-1);
     }
-    
+
     if (attempt.succeeded) {
       LOG.info("Successfully became active. " + attempt.status);
     } else {

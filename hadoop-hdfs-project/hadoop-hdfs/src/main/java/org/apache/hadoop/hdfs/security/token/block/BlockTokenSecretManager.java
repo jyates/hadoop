@@ -53,7 +53,7 @@ import com.google.common.base.Preconditions;
 public class BlockTokenSecretManager extends
     SecretManager<BlockTokenIdentifier> {
   public static final Log LOG = LogFactory.getLog(BlockTokenSecretManager.class);
-  
+
   public static final Token<BlockTokenIdentifier> DUMMY_TOKEN = new Token<BlockTokenIdentifier>();
 
   private final boolean isMaster;
@@ -74,9 +74,9 @@ public class BlockTokenSecretManager extends
 
   private final int intRange;
   private final int nnRangeStart;
-  
+
   private final SecureRandom nonceGenerator = new SecureRandom();
-  
+
   /**
    * Constructor for slaves.
    *
