@@ -668,7 +668,8 @@ public abstract class ZKFailoverController {
       otherZkfcs.add(cedeRemoteActive(remote, timeout));
     }
 
-    assert activeNode != null : "Active node does not match any known remote node";
+    assert
+      activeNode != null : "Active node does not match any known remote node";
 
     // Phase 3b: ask the old active to yield
     otherZkfcs.add(cedeRemoteActive(activeNode, timeout));
@@ -708,15 +709,17 @@ public abstract class ZKFailoverController {
   }
 
   /**
-   * Ask the remote zkfc to cede its active status and wait for the specified timeout before
-   * attempting to claim leader status
+   * Ask the remote zkfc to cede its active status and wait for the specified
+   * timeout before attempting to claim leader status
    * @param remote node to ask
    * @param timeout amount of time to cede
    * @return the {@link ZKFCProtocol} used to talk to the ndoe
    * @throws IOException
    */
-  private ZKFCProtocol cedeRemoteActive(HAServiceTarget remote, int timeout) throws IOException {
-    LOG.info("Asking " + remote + " to cede its active state for " + timeout + "ms");
+  private ZKFCProtocol cedeRemoteActive(HAServiceTarget remote, int timeout)
+    throws IOException {
+    LOG.info("Asking " + remote + " to cede its active state for "
+               + timeout + "ms");
     ZKFCProtocol oldZkfc = remote.getZKFCProxy(conf, timeout);
     oldZkfc.cedeActive(timeout);
     return oldZkfc;
@@ -812,7 +815,8 @@ public abstract class ZKFailoverController {
           break;
           
         default:
-          throw new IllegalArgumentException("Unhandled state:" + lastHealthState);
+          throw new IllegalArgumentException("Unhandled state:"
+                                               + lastHealthState);
         }
       }
     }
