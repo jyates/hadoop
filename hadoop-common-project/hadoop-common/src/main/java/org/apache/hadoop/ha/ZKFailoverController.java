@@ -710,7 +710,7 @@ public abstract class ZKFailoverController {
 
   /**
    * Ask the remote zkfc to cede its active status and wait for the specified
-   * timeout before attempting to claim leader status
+   * timeout before attempting to claim leader status.
    * @param remote node to ask
    * @param timeout amount of time to cede
    * @return the {@link ZKFCProtocol} used to talk to the ndoe
