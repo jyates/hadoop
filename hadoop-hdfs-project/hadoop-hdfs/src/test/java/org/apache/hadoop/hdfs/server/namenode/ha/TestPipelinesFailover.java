@@ -416,7 +416,7 @@ public class TestPipelinesFailover {
              .numDataNodes(dnCount)
              .build();
   }
-  
+
   /**
    * Stress test for pipeline/lease recovery. Starts a number of
    * threads, each of which creates a file and has another client
